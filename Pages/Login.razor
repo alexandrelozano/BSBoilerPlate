@@ -1,0 +1,195 @@
+﻿@page "/login"
+@using EventAggregator.Blazor
+@using BSBoilerPlate.Authorization
+@using BSBoilerPlate.Models
+@using BSBoilerPlate.Models.Events
+@using BSBoilerPlate.Services
+@using System.Globalization
+@using Microsoft.AspNetCore.Mvc;
+@inject NavigationManager _navigationManager
+@inject AppService _appService
+@inject IStringLocalizer<Login> _localizer
+@inject Blazored.SessionStorage.ISessionStorageService sessionStorage
+
+<PageTitle>Login</PageTitle>
+
+<MudForm id="frmLogin" @ref="form" hidden=@LoginHidden @bind-IsValid="@success" @bind-Errors="@errors" autocomplete=@("mud-disabled-"+Guid.NewGuid())>
+    <MudCard>
+        <MudCardHeader>
+            <MudImage Src="@Logo()" Width="128" Height="128" Alt="@application.Name" Elevation="25" Class="rounded-lg ma-1" />
+            <MudText Typo="Typo.h4">@application.Name</MudText>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudTextField autocomplete=@("mud-disabled-"+Guid.NewGuid()) T="string" Label="@_localizer["Username"]"
+                              Required="true" @ref="txtUsername"
+                              RequiredError="@_localizer["User name is required!"]"
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AccountCircle" />
+                <MudTextField autocomplete=@("mud-disabled-"+Guid.NewGuid()) T="string" Label="@_localizer["Password"]"
+                              @ref="txtPassword"
+                              InputType="InputType.Password"
+                              Required="true"
+                              RequiredError="@_localizer["Password is required!"]"
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Key" />
+                <MudText typeof="Typo.h5" Color="Color.Error">@error</MudText>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="ml-auto" OnClick="@(async () => Submit())">@_localizer["Login"]</MudButton>
+            </MudCardActions>
+        </MudCard>
+        <MudDivider DividerType="DividerType.FullWidth" />
+        <MudText Typo="Typo.subtitle1">
+            @application.CompanyName ©@DateTime.Now.ToString("yyyy")
+    </MudText>
+
+</MudForm>
+
+@code {
+
+    [Parameter] public string returnUrl { get; set; }
+    [CascadingParameter] public Task<AuthenticationState> AuthTask { get; set; }
+    [Inject] private AuthenticationStateProvider AuthState { get; set; }
+    [Inject] public IJSRuntime jsRuntime { get; set; }
+    [Inject] private IEventAggregator _eventAggregator { get; set; }
+
+    bool success;
+    bool LoginHidden;
+    MudForm form;
+    string[] errors = { };
+    string error = "";
+    MudTextField<string> txtUsername;
+    MudTextField<string> txtPassword;
+    Application application;
+
+    public async Task<string> GetIpAddress()
+    {
+        try
+        {
+            var ipAddress = await jsRuntime.InvokeAsync<string>("getIpAddress")
+                .ConfigureAwait(true);
+            return ipAddress;
+        }
+        catch (Exception e)
+        {
+            //If your request was blocked by CORS or some extension like uBlock Origin then you will get an exception.
+            return string.Empty;
+        }
+    }
+
+    string Logo()
+    {
+        string imageSource = "";
+
+        if (application.logo != null)
+        {
+            var imagesrc = Convert.ToBase64String(application.logo.ToArray());
+            imageSource = string.Format("data:image/png;base64,{0}", imagesrc);
+        }
+
+        return imageSource;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        LoginHidden = true;
+        application = _appService.ApplicationGet();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var localUserName = await sessionStorage.GetItemAsync<string>("UserName");
+            var localUserPasswordMD5 = await sessionStorage.GetItemAsync<string>("UserPasswordMD5");
+            var localRedirectUrl = await sessionStorage.GetItemAsync<string>("RedirectUrl");
+
+            if (!string.IsNullOrEmpty(localUserName) && !string.IsNullOrEmpty(localUserPasswordMD5) && !string.IsNullOrEmpty(localRedirectUrl))
+            {
+                var user = (from u in _appService.UsersGet() where u.UserName == localUserName && u.Password == localUserPasswordMD5 && u.Inactive == null select u).FirstOrDefault<User>();
+
+                if (user != null)
+                {
+                    var authState = await ((CustomAuthenticationStateProvider)AuthState).ChangeUser(user);
+                    returnUrl = localRedirectUrl;
+                }
+            }
+
+            if (_appService.UserLogged() != null)
+            {
+                if (!String.IsNullOrEmpty(returnUrl) && returnUrl != "~/login" && returnUrl != "login")
+                {
+                    _appService.SessionGUID = await sessionStorage.GetItemAsync<Guid>("SessionGUID");
+
+                    LoginEvent loginEvent = new LoginEvent()
+                    {
+                        _BSBoilerPlateContext = _appService._BSBoilerPlateContext,
+                        SessionGUID = _appService.SessionGUID
+                    };
+        
+                    await _eventAggregator.PublishAsync(loginEvent);
+
+                    await sessionStorage.SetItemAsync("RedirectUrl", "");
+                    _navigationManager.NavigateTo(returnUrl);
+                }
+            }
+
+            LoginHidden = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Submit()
+    {
+        await form.Validate();
+
+        if (form.IsValid)
+        {
+            string md5Password = AppService.CreateMD5(txtPassword.Text);
+
+            User? user = await _appService.UserLogin(txtUsername.Text, md5Password);
+            
+            if (user != null)
+            {
+                var authState = ((CustomAuthenticationStateProvider)AuthState).ChangeUser(user);
+
+                var ip = new { ip = await GetIpAddress() };
+
+                _appService.Log(LogAction.Names.Login.ToString(), ip);
+
+                await sessionStorage.SetItemAsync("UserName", user.UserName);
+                await sessionStorage.SetItemAsync("UserPasswordMD5", user.Password);
+                await sessionStorage.SetItemAsync("SessionGUID", _appService.SessionGUID);
+
+                if (!string.IsNullOrEmpty(user.Culture) && CultureInfo.CurrentCulture.Name != user.Culture)
+                {
+                    await sessionStorage.SetItemAsync("RedirectUrl", "index");
+                    _navigationManager.NavigateTo($"{_navigationManager.BaseUri}culture?culture={user.Culture}&redirectUri=/index", forceLoad: true);
+                }
+                else
+                {
+                    LoginEvent loginEvent = new LoginEvent()
+                    {
+                        _BSBoilerPlateContext = _appService._BSBoilerPlateContext,
+                        SessionGUID = _appService.SessionGUID
+                    };
+
+                    await _eventAggregator.PublishAsync(loginEvent);
+
+                    if (!String.IsNullOrEmpty(returnUrl))
+                    {
+                        _navigationManager.NavigateTo(returnUrl);
+                    }
+                    else
+                    {
+                        _navigationManager.NavigateTo("/");
+                    }
+                }
+            }
+            else
+            {
+                error = _localizer["Wrong username/password"];
+            }
+        }
+    }
+}

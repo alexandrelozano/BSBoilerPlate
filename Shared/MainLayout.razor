@@ -1,0 +1,243 @@
+﻿@inherits LayoutComponentBase
+@implements IHandle<LoginEvent>
+@implements IHandle<MessageEvent>
+@using EventAggregator.Blazor
+@using BSBoilerPlate.Authorization
+@using BSBoilerPlate.Data
+@using BSBoilerPlate.Services
+@using BSBoilerPlate.Models
+@using BSBoilerPlate.Models.Events
+@using System.Globalization
+@inject IStringLocalizer<MainLayout> _localizer
+@inject NavigationManager _navigationManager
+@inject AppService _appService
+@inject BSBoilerPlateContext BSBoilerPlateContext
+@inject Blazored.SessionStorage.ISessionStorageService sessionStorage
+
+<MudThemeProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout Style="height:100vh;">
+    <MudAppBar Elevation="0">
+        <AuthorizeView>
+            <Authorized>
+                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+                <MudSpacer />
+                <MudTooltip Text="@_localizer["Chat"]">
+                    <MudBadge Content="@ChatMessageUnreads()" Overlap="true">
+                        <MudIconButton Icon="@Icons.Material.Filled.Chat" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => _navigationManager.NavigateTo("chat"))" />
+                    </MudBadge>
+                </MudTooltip>
+                <MudTooltip Text="@CurrentLanguage">
+                    <MudMenu Class="mx-1" Icon="@Icons.Material.Outlined.Translate" Color="Color.Inherit" Dense="true" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.BottomRight">
+                        @foreach (var language in Enum.GetValues(typeof(Models.Languages)))
+                        {
+                            if (language.ToString() == CurrentLanguage)
+                            {
+                            <MudMenuItem style="background:var(--mud-palette-primary); color:white">@language.ToString()</MudMenuItem>
+                            }
+                            else
+                            {
+                            <MudMenuItem OnClick="(()=> ChangeLanguageAsync(language.ToString()))">@language.ToString()</MudMenuItem>
+                            }
+                        }
+                    </MudMenu>
+                </MudTooltip>
+                <MudMenu Label="@UserName()" StartIcon="@Icons.Material.Filled.AccountCircle" EndIcon="@Icons.Material.Filled.KeyboardArrowDown" Color="Color.Inherit" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.BottomLeft">
+                    <MudMenuItem Href="settings" Icon="@Icons.Material.Filled.Settings">@_localizer["Settings"]</MudMenuItem>
+                    <MudMenuItem OnClick="@(async () => await Logout())" Icon="@Icons.Material.Filled.Logout">@_localizer["Logout"]</MudMenuItem>
+                </MudMenu>
+            </Authorized>
+            <NotAuthorized>
+                    <MudSpacer />
+                    <MudTooltip Text="@CurrentLanguage">
+                        <MudMenu Class="mx-1" Icon="@Icons.Material.Outlined.Translate" Color="Color.Inherit" Dense="true" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.BottomRight">
+                            @foreach (var language in Enum.GetValues(typeof(Models.Languages)))
+                            {
+                                if (language.ToString() == CurrentLanguage)
+                                {
+                                    <MudMenuItem style="background:var(--mud-palette-primary); color:white">@language.ToString()</MudMenuItem>
+                                }
+                                else
+                                {
+                                    <MudMenuItem OnClick="(()=> ChangeLanguageAsync(language.ToString()))">@language.ToString()</MudMenuItem>
+                                }
+                            }
+                    </MudMenu>
+                </MudTooltip>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudAppBar>
+    <MudDrawer @bind-Open="_appService.MenuOpened" Elevation="1">
+        <MudDrawerHeader>
+                <MudImage Src="@LogoIcon()" Width="32" Height="32" Alt="@application.Name" Elevation="25" Class="rounded-lg ma-1" />
+                <MudText Typo="Typo.h6" Class="mt-1">
+                    @application.Name
+                </MudText>
+        </MudDrawerHeader>
+        <NavMenu />
+        <MudDivider DividerType="DividerType.FullWidth" />
+        <MudText Typo="Typo.subtitle1">
+            @application.CompanyName ©@DateTime.Now.ToString("yyyy")
+        </MudText>
+    </MudDrawer>
+    <MudMainContent Class="pb-4" Style="height:100%;">
+        <MudContainer MaxWidth="MaxWidth.Large" Class="my-4 pb-4 pt-4" Style="display: flex; flex-flow: column; height:100%;">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    [Inject] private AuthenticationStateProvider AuthState { get; set; }
+    [Inject] private IEventAggregator _eventAggregator { get; set; }
+
+    [CascadingParameter] public Task<AuthenticationState> AuthTask { get; set; }
+    string CurrentLanguage;
+    User? user;
+    Application application;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _appService.MenuOpened = false;
+        application = _appService.ApplicationGet();
+        _eventAggregator.Subscribe(this);
+
+        CurrentLanguage = LanguageName(CultureInfo.CurrentCulture.Name);
+    }
+
+    int ChatMessageUnreads()
+    {
+        int ret = 0;
+
+        if (user != null)
+        {
+            ret = _appService.ChatMessageGetUnreads(user.ID);
+        }
+
+        return ret;
+    }
+
+    public Task HandleAsync(LoginEvent loginEvent)
+    {
+        InvokeAsync(() =>
+        {
+            if (loginEvent.SessionGUID == _appService.SessionGUID)
+            {
+                user = _appService.UserLogged(loginEvent._BSBoilerPlateContext);
+                StateHasChanged();
+            }
+        });
+
+        return Task.CompletedTask;
+    }
+
+    public Task HandleAsync(MessageEvent messageEvent)
+    {
+        InvokeAsync(() =>
+        {
+            if (user != null && messageEvent.UserToID == user.ID)
+            {
+                StateHasChanged();
+            }
+        });
+
+        return Task.CompletedTask;
+    }
+
+    string LogoIcon()
+    {
+        string imageSource = "";
+
+        if (application != null && application.logoIcon != null)
+        {
+            var imagesrc = Convert.ToBase64String(application.logoIcon.ToArray());
+            imageSource = string.Format("data:image/png;base64,{0}", imagesrc);
+        }
+
+        return imageSource;
+    }
+
+    string LanguageName(string cultureName)
+    {
+        string name = "";
+
+        switch (cultureName)
+        {
+            case "ca-ES":
+                name = "Català";
+                break;
+            case "es-ES":
+                name = "Español";
+                break;
+            default:
+                name = "English";
+                break;
+        }
+
+        return name;
+    }
+
+    private async Task ChangeLanguageAsync(string languageName)
+    {
+        string newCulture;
+
+        CurrentLanguage = languageName;
+
+        switch (languageName)
+        {
+            case "Català":
+                newCulture = "ca-ES";
+                break;
+            case "Español":
+                newCulture = "es-ES";
+                break;
+            default:
+                newCulture = "en-EN";
+                break;
+        }
+
+        if (user != null)
+        {
+            user.Culture = newCulture;
+            _appService.UserUpdate(user);
+        }
+
+        string redirectUrl = _navigationManager.Uri.Replace(_navigationManager.BaseUri, "");
+        if (string.IsNullOrEmpty(redirectUrl))
+        {
+            redirectUrl = "index";
+        }
+
+        await sessionStorage.SetItemAsync("RedirectUrl", redirectUrl);
+        _navigationManager.NavigateTo($"{_navigationManager.BaseUri}culture?culture={newCulture}&redirectUri=/", forceLoad: true);
+    }
+
+    void DrawerToggle()
+    {
+        _appService.MenuOpened = !_appService.MenuOpened;
+    }
+
+    string UserName()
+    {
+        if (user != null)
+        {
+            return user.UserName;
+        }
+        else
+            return "";
+    }
+
+    private async Task Logout()
+    {
+        _appService.Log(LogAction.Names.Logout.ToString());
+
+        var authState = await ((CustomAuthenticationStateProvider)AuthState).Logout();
+        await sessionStorage.ClearAsync();
+        
+        _appService.MenuOpened = false;
+
+        _navigationManager.NavigateTo("login");
+    }
+}

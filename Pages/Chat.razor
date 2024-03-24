@@ -1,0 +1,134 @@
+﻿@page "/chat"
+@implements IHandle<MessageEvent>
+@using System.Text
+@using EventAggregator.Blazor
+@using BSBoilerPlate.Authorization
+@using BSBoilerPlate.Models
+@using BSBoilerPlate.Data
+@using BSBoilerPlate.Models.Events
+@using BSBoilerPlate.Services
+@using System.Globalization
+@inject IStringLocalizer<Chat> _localizer
+@inject AppService _appService
+@inject NavigationManager _navigationManager
+
+<AuthorizeView>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+    <Authorized>
+        <MudTabs Outlined="true" Position="Position.Left" ActivePanelIndexChanged="@(index => ActivePanelChanged(index))" Rounded="true" Border="true" ApplyEffectsToContainer="true" Class="mt-0 mb-4" PanelClass="pa-0 flex-grow-1" Style="height:100%;">
+            @{
+                int i = 0;
+                foreach (User userFrom in users)
+                {
+                    <MudTabPanel Text="@userFrom.FullName">
+                        <MudPaper Style="display: flex; flex-flow: column; height:100%; width:100%;" Outlined="false" Elevation="0" Square="false">
+                            <MudPaper Style="flex: 1 1 auto; overflow: auto;" Outlined="false" Elevation="0" Square="false" id="divMessages">
+                                @{
+                                    i++;
+                                    if (i == 1)
+                                    {
+                                        if (_appService.ChatMessagesMarkRead(user.ID, userFrom.ID))
+                                        {
+                                            MessageEvent messageEvent = new MessageEvent()
+                                            {
+                                                _BSBoilerPlateContext = _appService._BSBoilerPlateContext,
+                                                UserToID = user.ID
+                                            };
+
+                                            _eventAggregator.PublishAsync(messageEvent);
+                                        }
+                                    }
+
+                                    foreach (ChatMessage chatMessage in _appService.ChatMessageGet(users.ElementAt(activeIndex).ID, user.ID))
+                                    {
+                                        <MudText Align="@(chatMessage.UserFromID==user.ID ? Align.Right : Align.Left)" Typo="Typo.body2">
+                                            @(new MarkupString($"{chatMessage.Message} <sub>{chatMessage.DateTime.ToShortDateString()} {chatMessage.DateTime.ToShortTimeString()}</sub>"))
+                                        </MudText>
+                                    }
+                                }
+                            </MudPaper>
+                            <MudPaper Style="flex: 0 1 auto;" Outlined="false" Elevation="0" Square="false">
+                                <MudPaper Style="display: flex; flex-flow: row; height:100%; width:100%;">
+                                    <MudTextField T="string" @bind-Value="message" Variant="Variant.Outlined" Style="flex: 1 1 auto;"></MudTextField>
+                                <MudButton Variant="Variant.Filled" Style="flex: 0 1 auto;" OnClick="@(async ()=> await SendMessage())">Send</MudButton>
+                                </MudPaper>
+                            </MudPaper>
+                        </MudPaper>
+                    </MudTabPanel>
+                }
+            }
+        </MudTabs>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+
+    List<User> users;
+    User? user;
+    string message;
+    int activeIndex;
+    [Inject] private IEventAggregator _eventAggregator { get; set; }
+    [Inject] public IJSRuntime jsRuntime { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        user = _appService.UserLogged();
+
+        if (user != null)
+        {
+            users = _appService.UsersGet().Where(p => p.ID != user.ID).OrderBy(p => p.FullName).ToList();                        
+        }
+
+        _eventAggregator.Subscribe(this);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        ScrollToEnd();
+    }
+
+    void ScrollToEnd()
+    {
+        jsRuntime.InvokeVoidAsync("scrollToEnd", new object[] { "divMessages" });
+    }
+
+    public Task HandleAsync(MessageEvent messageEvent)
+    {
+        InvokeAsync(() =>
+        {
+            if (user != null && messageEvent.UserToID == user.ID)
+            {
+                StateHasChanged();
+            }
+        });
+
+        return Task.CompletedTask;
+    }
+
+    private async Task SendMessage()
+    {
+        _appService.ChatMessageSend(message, user.ID, users.ElementAt(activeIndex).ID);
+
+        MessageEvent messageEvent = new MessageEvent()
+        {
+            _BSBoilerPlateContext = _appService._BSBoilerPlateContext,
+            UserToID = users.ElementAt(activeIndex).ID
+        };
+
+        await _eventAggregator.PublishAsync(messageEvent);
+
+        message = "";
+    }
+
+    void ActivePanelChanged(int index)
+    {
+        activeIndex = index;
+
+        if (user != null && users != null && activeIndex > 0 && activeIndex < users.Count)
+        {
+            _appService.ChatMessagesMarkRead(user.ID, users.ElementAt(activeIndex).ID);
+        }
+    }
+}

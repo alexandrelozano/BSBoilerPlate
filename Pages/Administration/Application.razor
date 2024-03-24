@@ -1,0 +1,163 @@
+﻿@page "/administration/application"
+@using BSBoilerPlate.Authorization
+@using BSBoilerPlate.Models
+@using BSBoilerPlate.Data
+@using BSBoilerPlate.Services
+@using System.Globalization
+@inject IStringLocalizer<Pages.Administration.Application> _localizer
+@inject AppService _appService
+@inject NavigationManager _navigationManager
+@inject BSBoilerPlateContext _BSBoilerPlateContext
+@inject AppService _appService
+
+<AuthorizeView>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+    <Authorized>
+        <MudText Typo="Typo.h3" GutterBottom="true">@_localizer["Application"]</MudText>
+            <MudCard>
+                <MudCardHeader>
+                    <MudText Typo="Typo.h4" GutterBottom="true">@_localizer["Settings"]:</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudTextField Label="@_localizer["Name"]" @bind-Value="application.Name" InputType="InputType.Text" />
+                    <MudTextField Label="@_localizer["Company name"]" @bind-Value="application.CompanyName" InputType="InputType.Text" />
+                    <br />
+                    <MudText Typo="Typo.body1" GutterBottom="true">@_localizer["Logo icon"]</MudText>
+                    <MudImage Src="@LogoIcon()" Width="64" Height="64" Alt="@application.Name" Elevation="25" Class="rounded-lg ma-1" />
+                    <MudFileUpload T="IBrowserFile" FilesChanged="UploadLogoIcon">
+                        <ButtonTemplate Context="buttoncontext">
+                            <MudButton HtmlTag="label"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.CloudUpload"
+                                       for="@buttoncontext.Id">
+                                @_localizer["Upload Image"]
+                            </MudButton>
+                        </ButtonTemplate>
+                    </MudFileUpload>
+                    <br />
+                    <MudText Typo="Typo.body1" GutterBottom="true">@_localizer["Logo"]</MudText>
+                    <MudImage Src="@Logo()" Width="128" Height="128" Alt="@application.Name" Elevation="25" Class="rounded-lg ma-1" />
+                    <MudFileUpload T="IBrowserFile" FilesChanged="UploadLogo">
+                        <ButtonTemplate Context="buttoncontext">
+                            <MudButton HtmlTag="label"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.CloudUpload"
+                                       for="@buttoncontext.Id">
+                                @_localizer["Upload Image"]
+                        </MudButton>
+                    </ButtonTemplate>
+                </MudFileUpload>
+                    <MudAlert Severity="@ApplicationAlertSeverity" hidden="@String.IsNullOrEmpty(updateApplicationAlert)">@updateApplicationAlert</MudAlert>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Update">@_localizer["Update"]</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </Authorized>
+    </AuthorizeView>
+
+    @code {
+    Models.Application application;
+    string updateApplicationAlert;
+    Severity ApplicationAlertSeverity;
+
+    protected override async Task OnInitializedAsync()
+    {
+        application = _appService.ApplicationGet();
+    }
+
+    private async void UploadLogoIcon(IBrowserFile file)
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+
+        await using var fs = new FileStream(path, FileMode.Create);
+
+        await file.OpenReadStream(file.Size).CopyToAsync(fs);
+
+        application.logoIcon = new byte[file.Size];
+
+        fs.Position = 0;
+
+        await fs.ReadAsync(application.logoIcon);
+
+        fs.Close();
+
+        File.Delete(path);
+
+        StateHasChanged();
+    }
+
+    private async void UploadLogo(IBrowserFile file)
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+
+        await using var fs = new FileStream(path, FileMode.Create);
+
+        await file.OpenReadStream(file.Size).CopyToAsync(fs);
+
+        application.logo = new byte[file.Size];
+
+        fs.Position = 0;
+
+        await fs.ReadAsync(application.logo);
+
+        fs.Close();
+
+        File.Delete(path);
+
+        StateHasChanged();
+    }
+
+    string LogoIcon()
+    {
+        string imageSource = "";
+
+        if (application.logo != null)
+        {
+            var imagesrc = Convert.ToBase64String(application.logoIcon.ToArray());
+            imageSource = string.Format("data:image/png;base64,{0}", imagesrc);
+        }
+
+        return imageSource;
+    }
+
+    string Logo()
+    {
+        string imageSource = "";
+
+        if (application.logo != null)
+        {
+            var imagesrc = Convert.ToBase64String(application.logo.ToArray());
+            imageSource = string.Format("data:image/png;base64,{0}", imagesrc);
+        }
+
+        return imageSource;
+    }
+
+    private async void Update()
+    {
+        if (String.IsNullOrEmpty(application.Name))
+        {
+            updateApplicationAlert = _localizer["Name is empty"];
+            ApplicationAlertSeverity = Severity.Error;
+            return;
+        }
+
+        if (String.IsNullOrEmpty(application.CompanyName))
+        {
+            updateApplicationAlert = _localizer["Company name is empty"];
+            ApplicationAlertSeverity = Severity.Error;
+            return;
+        }
+
+        _appService.ApplicationUpdate(application);
+
+        updateApplicationAlert = _localizer["Settings updated"];
+        ApplicationAlertSeverity = Severity.Info;
+    }
+
+    }

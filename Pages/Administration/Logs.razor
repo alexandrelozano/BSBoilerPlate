@@ -1,0 +1,311 @@
+﻿@page "/administration/logs"
+@using System.Data;
+@using BSBoilerPlate.Models
+@using BSBoilerPlate.Services
+@using BSBoilerPlate.Models.DTOs
+@inject IDialogService _dialogService;
+@inject AppService _appService
+@inject IStringLocalizer<Logs> _localizer
+
+<AuthorizeView Roles="Administrator">
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+    <Authorized Context="authContext">
+        <PageTitle>Roles</PageTitle>
+
+        <MudText Typo="Typo.h3" GutterBottom="true">@_localizer["Logs"]</MudText>
+            <MudText Class="mb-8">@_localizer["Logs page"]</MudText>
+        @if (_requestDto == null)
+        {
+            <MudText Class="mb-8">@_localizer["No logs found"]</MudText>
+        }
+        else
+        {
+            <MudDataGrid ServerData="LoadGridData"
+                         Filterable="true" FilterMode="@DataGridFilterMode.ColumnFilterRow"
+                         T="LogListItemDto" @ref="_dataGrid">
+                <Columns>
+                    <HierarchyColumn T="LogListItemDto" />
+                    <PropertyColumn Property="@(item => item.DateTime)" Title="Date time">
+                        <FilterTemplate>
+                            <MudIconButton OnClick="@DateTimeOpenFilter" Icon="@_dateTimeIcon" Size="@Size.Small" />
+                            <MudOverlay Visible="@_dateTimefilterOpen" OnClick="@(() => _dateTimefilterOpen = false)" />
+                            <MudPopover Open="@_dateTimefilterOpen" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter"
+                                        Style="width:250px">
+                                <MudStack Spacing="0">
+                                    <MudStack Spacing="0" Style="overflow-y:auto;max-height:250px">
+                                        <MudDatePicker Label="Start" @bind-Date="_dateTimeStart" />
+                                        <MudDatePicker Label="End" @bind-Date="_dateTimeEnd" />
+                                    </MudStack>
+                                    <MudStack Row="true">
+                                        <MudButton OnClick="@(() => DateTimeClearFilterAsync(context))">Clear</MudButton>
+                                        <MudButton Color="@Color.Primary" OnClick="@(() => DateTimeApplyFilterAsync(context))">Filter</MudButton>
+                                    </MudStack>
+                                </MudStack>
+                            </MudPopover>
+                        </FilterTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn Property="@(item => item.LogAction)" Title="Action">
+                        <FilterTemplate>
+                            <MudIconButton OnClick="@LogActionOpenFilter" Icon="@_logActionIcon" Size="@Size.Small" />
+                            <MudOverlay Visible="@_logActionfilterOpen" OnClick="@(() => _logActionfilterOpen = false)" />
+                            <MudPopover Open="@_logActionfilterOpen" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter"
+                                        Style="width:150px">
+                                <MudStack Spacing="0">
+                                    <MudCheckBox T="bool" Label="Select All" Size="@Size.Small" Checked="@_logActionSelectAll" CheckedChanged="@LogActionSelectAll" />
+                                    <MudStack Spacing="0" Style="overflow-y:auto;max-height:250px">
+                                        @foreach (var item in _logActionItems)
+                                        {
+                                            <MudCheckBox T="bool" Label="@($"{item}")" Size="@Size.Small" Checked="@(_logActionSelectedItems.Contains(item))"
+                                                         CheckedChanged="@((value) => LogActionSelectedChanged(value, item))" />
+                                        }
+                                    </MudStack>
+                                    <MudStack Row="true">
+                                        <MudButton Color="@Color.Primary" OnClick="@(() => LogActionApplyFilterAsync(context))">Filter</MudButton>
+                                    </MudStack>
+                                </MudStack>
+                            </MudPopover>
+                        </FilterTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn Property="@(item => item.UserName)" Title="Username" Filterable="true">
+                        <FilterTemplate>
+                            <MudIconButton OnClick="@UserNameOpenFilter" Icon="@_userNameIcon" Size="@Size.Small" />
+                            <MudOverlay Visible="@_userNamefilterOpen" OnClick="@(() => _userNamefilterOpen = false)" />
+                            <MudPopover Open="@_userNamefilterOpen" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter"
+                                        Style="width:150px">
+                                <MudStack Spacing="0">
+                                    <MudCheckBox T="bool" Label="Select All" Size="@Size.Small" Checked="@_userNameSelectAll" CheckedChanged="@UserNameSelectAll" />
+                                    <MudStack Spacing="0" Style="overflow-y:auto;max-height:250px">
+                                        @foreach (var item in _userNameItems)
+                                        {
+                                            <MudCheckBox T="bool" Label="@($"{item}")" Size="@Size.Small" Checked="@(_userNameSelectedItems.Contains(item))"
+                                                         CheckedChanged="@((value) => UserNameSelectedChanged(value, item))" />
+                                        }
+                                    </MudStack>
+                                    <MudStack Row="true">
+                                        <MudButton Color="@Color.Primary" OnClick="@(() => UserNameApplyFilterAsync(context))">Filter</MudButton>
+                                    </MudStack>
+                                </MudStack>
+                            </MudPopover>
+                        </FilterTemplate>
+                    </PropertyColumn>
+                </Columns>
+                <ChildRowContent>
+                    <MudCard>
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">@($"{context.Item.DateTime} - ({context.Item.UserName}) {context.Item.FullName}")</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudText>@context.Item.LogAction</MudText>
+                                <MudText>@_localizer["Additional properties"]:</MudText>
+                                <MudTable Items=@context.Item.LogItems Hover="true" Breakpoint="Breakpoint.Sm">
+                                    <HeaderContent>
+                                        <MudTh>@_localizer["Name"]</MudTh>
+                                        <MudTh>@_localizer["Value"]</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate Context="tableRowContext">
+                                        <MudTd DataLabel="Name">@tableRowContext.Name</MudTd>
+                                        <MudTd DataLabel="Value">@tableRowContext.Value</MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            </MudCardContent>
+                        </MudCard>
+                    </ChildRowContent>
+                    <PagerContent>
+                        <MudDataGridPager T="LogListItemDto" />
+                    </PagerContent>
+                </MudDataGrid>
+        }
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private MudDataGrid<LogListItemDto>? _dataGrid;
+    private LogDataGridRequestDto _requestDto = new();
+
+    private DateTime? _dateTimeStart = null;
+    private DateTime? _dateTimeEnd = null;
+
+    bool _dateTimefilterOpen = false;
+    string _dateTimeIcon = Icons.Material.Outlined.FilterAlt;
+
+    HashSet<string> _logActionItems = new();
+    HashSet<string> _logActionSelectedItems = new();
+    HashSet<string> _logActionFilterItems = new();
+    bool _logActionSelectAll = true;
+    string _logActionIcon = Icons.Material.Outlined.FilterAlt;
+    bool _logActionfilterOpen = false;
+    FilterDefinition<LogListItemDto> _gridFilterDefinition;
+
+    HashSet<string> _userNameItems = new();
+    HashSet<string> _userNameSelectedItems = new();
+    HashSet<string> _userNameFilterItems = new();
+    bool _userNameSelectAll = true;
+    string _userNameIcon = Icons.Material.Outlined.FilterAlt;
+    bool _userNamefilterOpen = false;
+
+    #region DateTime filter
+
+    void DateTimeOpenFilter()
+    {
+        _dateTimefilterOpen = true;
+    }
+
+    private async Task DateTimeClearFilterAsync(FilterContext<LogListItemDto> context)
+    {
+        _dateTimeStart = null;
+        _dateTimeEnd = null;
+        _dateTimeIcon = Icons.Material.Outlined.FilterAlt;
+        await context.Actions.ClearFilterAsync(_gridFilterDefinition);
+        _dateTimefilterOpen = false;
+    }
+
+    private async Task DateTimeApplyFilterAsync(FilterContext<LogListItemDto> context)
+    {
+        if (_dateTimeStart is null && _dateTimeEnd is null)
+            _dateTimeIcon = Icons.Material.Outlined.FilterAlt;
+        else
+            _dateTimeIcon = Icons.Material.Filled.FilterAlt;
+
+        await context.Actions.ApplyFilterAsync(_gridFilterDefinition);
+        _dateTimefilterOpen = false;
+    }
+    #endregion
+
+    #region UserName filter
+
+    private async Task UserNameApplyFilterAsync(FilterContext<LogListItemDto> context)
+    {
+        _userNameFilterItems = _userNameSelectedItems.ToHashSet();
+        _userNameIcon = _userNameFilterItems.Count == _userNameItems.Count ? Icons.Material.Outlined.FilterAlt : Icons.Material.Filled.FilterAlt;
+        await context.Actions.ApplyFilterAsync(_gridFilterDefinition);
+        _userNamefilterOpen = false;
+    }
+
+    private void UserNameSelectedChanged(bool value, string item)
+    {
+        if (value)
+            _userNameSelectedItems.Add(item);
+        else
+            _userNameSelectedItems.Remove(item);
+
+        if (_userNameSelectedItems.Count == _userNameItems.Count())
+            _userNameSelectAll = true;
+        else
+            _userNameSelectAll = false;
+    }
+
+    void UserNameOpenFilter()
+    {
+        _userNamefilterOpen = true;
+    }
+
+    private void UserNameSelectAll(bool value)
+    {
+        _userNameSelectAll = value;
+
+        if (value)
+        {
+            _userNameSelectedItems = _userNameItems.ToHashSet();
+        }
+        else
+        {
+            _userNameSelectedItems.Clear();
+        }
+    }
+    #endregion
+
+    #region LogAction filter
+
+    private async Task LogActionApplyFilterAsync(FilterContext<LogListItemDto> context)
+    {
+        _logActionFilterItems = _logActionSelectedItems.ToHashSet();
+        _logActionIcon = _logActionFilterItems.Count == _logActionItems.Count ? Icons.Material.Outlined.FilterAlt : Icons.Material.Filled.FilterAlt;
+        await context.Actions.ApplyFilterAsync(_gridFilterDefinition);
+        _logActionfilterOpen = false;
+    }
+
+    private void LogActionSelectedChanged(bool value, string item)
+    {
+        if (value)
+            _logActionSelectedItems.Add(item);
+        else
+            _logActionSelectedItems.Remove(item);
+
+        if (_logActionSelectedItems.Count == _logActionItems.Count())
+            _logActionSelectAll = true;
+        else
+            _logActionSelectAll = false;
+    }
+
+    void LogActionOpenFilter()
+    {
+        _logActionfilterOpen = true;
+    }
+
+    private void LogActionSelectAll(bool value)
+    {
+        _logActionSelectAll = value;
+
+        if (value)
+        {
+            _logActionSelectedItems = _logActionItems.ToHashSet();
+        }
+        else
+        {
+            _logActionSelectedItems.Clear();
+        }
+    }
+
+    #endregion
+
+    protected override async Task OnInitializedAsync()
+    {
+        _logActionItems = Enum.GetNames(typeof(LogAction.Names)).OrderBy(p => p).ToHashSet();
+        _logActionSelectedItems = Enum.GetNames(typeof(LogAction.Names)).ToHashSet();
+        _logActionFilterItems = Enum.GetNames(typeof(LogAction.Names)).ToHashSet();
+
+        _userNameItems = (from u in _appService.UsersGet() orderby u.UserName select u.UserName).ToHashSet();
+        _userNameSelectedItems = _userNameItems.ToHashSet();
+        _userNameFilterItems = _userNameItems.ToHashSet();
+
+        _gridFilterDefinition = new FilterDefinition<LogListItemDto>
+            {
+                FilterFunction = x => _logActionFilterItems.Contains(x.LogAction)
+                                        && _userNameFilterItems.Contains(x.UserName)
+                                        && (_dateTimeStart is null || x.DateTime >= _dateTimeStart)
+                                        && (_dateTimeEnd is null || x.DateTime <= _dateTimeEnd)
+            };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+
+        if (firstRender)
+        {
+            await _dataGrid.SetSortAsync("DateTime", SortDirection.Descending, x => x.DateTime, null);
+        }
+    }
+
+    private async Task<GridData<LogListItemDto>> LoadGridData(GridState<LogListItemDto> state)
+    {
+        _requestDto.Page = state.Page;
+        _requestDto.PageSize = state.PageSize;
+        _requestDto.FilterDefinitions = state.FilterDefinitions;
+        _requestDto.SortDefinitions = state.SortDefinitions;
+
+        LogListDto l = _appService.LogsGet(_requestDto);
+
+        GridData<LogListItemDto> data = new()
+            {
+                Items = l.Items,
+                TotalItems = l.ItemTotalCount
+            };
+
+        return data;
+    }
+}

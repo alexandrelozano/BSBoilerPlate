@@ -1,0 +1,32 @@
+﻿@using BSBoilerPlate.Services
+@using System.Globalization
+@inject IStringLocalizer<NavMenu> _localizer
+@inject NavigationManager _navigationManager
+@inject AppService _appService
+
+<MudNavMenu>
+    <MudNavLink @onclick='() => OpenAsync("")' Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">@_localizer["Home"]</MudNavLink>
+        <MudNavLink @onclick='() => OpenAsync("counter")' Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Add">Counter</MudNavLink>
+        <MudNavLink @onclick='() => OpenAsync("fetchdata")' Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.List">Fetch data</MudNavLink>
+
+        <AuthorizeView Roles="Administrator">
+            <NotAuthorized>
+            </NotAuthorized>
+            <Authorized>
+                <MudNavGroup Title="@_localizer["Administration"]" Expanded="true" Icon="@Icons.Material.Filled.Security">
+                    <MudNavLink @onclick='() => OpenAsync("administration/roles")' Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Group">@_localizer["Roles"]</MudNavLink>
+                    <MudNavLink @onclick='() => OpenAsync("administration/users")' Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Person">@_localizer["Users"]</MudNavLink>
+                    <MudNavLink @onclick='() => OpenAsync("administration/logs")' Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.HistoryEdu">@_localizer["Logs"]</MudNavLink>
+                    <MudNavLink @onclick='() => OpenAsync("administration/application")' Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AppSettingsAlt">@_localizer["Application"]</MudNavLink>
+                </MudNavGroup>
+            </Authorized>
+        </AuthorizeView>
+    </MudNavMenu>
+
+    @code {
+    protected async Task OpenAsync(string href)
+    {
+        _appService.MenuOpened = false;
+        _navigationManager.NavigateTo(href);
+    }
+}

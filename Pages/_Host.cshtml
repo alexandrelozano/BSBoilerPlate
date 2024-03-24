@@ -1,0 +1,25 @@
+﻿@page "/"
+@using System.Globalization
+@using Microsoft.Extensions.Localization
+@namespace BSBoilerPlate.Pages
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    Layout = "_Layout";
+}
+
+<component type="typeof(App)" render-mode="ServerPrerendered" />
+
+<script>
+    window.getIpAddress = () => {
+        return fetch('/api/info/ipaddress')
+            .then((response) => response.text())
+            .then((data) => {
+                return data
+            })
+    }
+
+    function scrollToEnd(divId) {
+        var div = document.getElementById(divId);
+        div.scrollTop = div.scrollHeight;
+    }
+</script>

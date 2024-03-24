@@ -1,0 +1,108 @@
+﻿@using BSBoilerPlate.Models
+@using BSBoilerPlate.Services
+@using BSBoilerPlate.Data
+@inject BSBoilerPlateContext BSBoilerPlateContext
+@inject IStringLocalizer<RoleDialog> _localizer
+
+<AuthorizeView Roles="Administrator">
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+    <Authorized Context="authContext">
+        <MudDialog>
+            <DialogContent>
+                <MudTextField T="int" Label="ID" @bind-Value="role.ID" ReadOnly=true />
+                <MudTextField T="string" Label="Name" @bind-Value="role.Name" ReadOnly=@ReadOnlyDialog() />
+                <MudDataGrid T="User" Items="@users">
+                    <ToolBarContent>
+                        <MudText Typo="Typo.h6">@_localizer["Users"]</MudText>
+                        <MudSpacer />
+                    </ToolBarContent>
+                    <Columns>
+                        <PropertyColumn Property="x => x.UserName" Title="@_localizer["User name"]" />
+                            <PropertyColumn Property="x => x.GivenName" Title="@_localizer["Given name"]" />
+                            <PropertyColumn Property="x => x.FirstSurname" Title="@_localizer["First surname"]" />
+                            <PropertyColumn Property="x => x.SecondSurname" Title="@_localizer["Second surname"]" />
+                    </Columns>
+                    <PagerContent>
+                        <MudDataGridPager T="User" />
+                    </PagerContent>
+                </MudDataGrid>
+            </DialogContent>
+            <DialogActions>
+                @if (ShowCancel())
+                {
+                    <MudButton OnClick="Cancel">@_localizer["Cancel"]</MudButton>
+                }
+                <MudButton Color="Color.Primary" OnClick="Submit">@_localizer["Ok"]</MudButton>
+            </DialogActions>
+        </MudDialog>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public Role role { get; set; } = new Role();
+    [Parameter] public DialogMode mode { get; set; }
+
+    private List<User> users = new List<User>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        users = (from u in BSBoilerPlateContext.Users where u.RoleID == role.ID select u).OrderBy(u => u.UserName).ToList<User>();
+    }
+
+    private bool ShowCancel()
+    {
+        bool ret = true;
+
+        switch (mode)
+        {
+            case DialogMode.Details:
+                ret = false;
+                break;
+            default:
+                ret = true;
+                break;
+        }
+
+        return ret;
+    }
+
+    private bool ReadOnlyDialog()
+    {
+        bool ret = false;
+
+        switch (mode)
+        {
+            case DialogMode.Update:
+                ret = false;
+                break;
+            case DialogMode.Delete:
+                ret = true;
+                break;
+            case DialogMode.Insert:
+                ret = false;
+                break;
+            case DialogMode.Details:
+                ret = true;
+                break;
+            default:
+                ret = true;
+                break;
+        }
+
+        return ret;
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void Submit()
+    {
+        MudDialog.Close(DialogResult.Ok<Role>(role));
+    }
+}

@@ -1,0 +1,155 @@
+﻿@page "/settings"
+@using BSBoilerPlate.Authorization
+@using BSBoilerPlate.Models
+@using BSBoilerPlate.Data
+@using BSBoilerPlate.Services
+@using System.Globalization
+@inject IStringLocalizer<Settings> _localizer
+@inject AppService _appService
+@inject NavigationManager _navigationManager
+@inject BSBoilerPlateContext _BSBoilerPlateContext
+@inject AppService _appService
+
+<AuthorizeView>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+    <Authorized>
+        <MudText Typo="Typo.h3" GutterBottom="true">@_localizer["Settings"]</MudText>
+            <MudCard>
+                <MudCardHeader>
+                    <MudText Typo="Typo.h4" GutterBottom="true">@_localizer["User information"]</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudText><b>@_localizer["Username"]:</b> @user.UserName</MudText>
+                    <MudText><b>@_localizer["Given name"]:</b> @user.GivenName</MudText>
+                    <MudText><b>@_localizer["First surname"]:</b> @user.FirstSurname</MudText>
+                    <MudText><b>@_localizer["Second surname"]:</b> @user.SecondSurname</MudText>
+                    <MudText><b>@_localizer["Date of birth"]:</b> @DOB()</MudText>
+                    <MudText><b>@_localizer["Role"]:</b> @user.Role.Name</MudText>
+                </MudCardContent>
+            </MudCard>
+            <br />
+            <MudCard>
+                <MudCardHeader>
+                    <MudText Typo="Typo.h4" GutterBottom="true">@_localizer["Change password"]:</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudTextField Label="@_localizer["Current password"]" @bind-Value="passwordCurrent" InputType="InputType.Password" />
+                    <MudTextField Label="@_localizer["New password"]" @bind-Value="passwordNew1" InputType="InputType.Password" />
+                    <MudTextField Label="@_localizer["Repeat new password"]" @bind-Value="passwordNew2" InputType="InputType.Password" />
+                    <MudAlert Severity="@PasswordAlertSeverity" hidden="@String.IsNullOrEmpty(changePasswordAlert)">@changePasswordAlert</MudAlert>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ChangePassword">@_localizer["Change password"]</MudButton>
+                </MudCardActions>
+            </MudCard>
+            <br />
+            <MudCard>
+                <MudCardHeader>
+                    <MudText Typo="Typo.h4" GutterBottom="true">@_localizer["Latests logins"]:</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudTable Items="@latestLogins" Hover="true" Context="tableContext" Breakpoint="Breakpoint.Sm">
+                        <HeaderContent>
+                            <MudTh>Date time</MudTh>
+                            <MudTh>I.P.</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Date time">@tableContext.DateTime</MudTd>
+                            <MudTd DataLabel="I.P.">
+                                @{
+                                    if (tableContext.LogItems != null && tableContext.LogItems.Count > 0)
+                                    {
+                                        @tableContext.LogItems.ElementAt(0).Value
+                                    }  
+                                }
+                            </MudTd >
+                        </RowTemplate>
+                    </MudTable>
+            </MudCardContent>
+        </MudCard>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    [Inject] private AuthenticationStateProvider AuthState { get; set; }
+    User? user;
+    string passwordCurrent;
+    string passwordNew1;
+    string passwordNew2;
+    string changePasswordAlert;
+    Severity PasswordAlertSeverity;
+    List<Log> latestLogins;
+
+    protected override async Task OnInitializedAsync()
+    {
+        user = _appService.UserLogged();
+
+        if (user != null)
+        {
+            latestLogins = _appService.LastestsLogins(user.ID);
+        }
+    }
+
+    protected string DOB()
+    {
+        string dob = "";
+
+        if (user.DOB != null)
+        {
+            dob = user.DOB.Value.ToString("dd/MM/yyyy");
+        }
+
+        return dob;
+    }
+
+    private async void ChangePassword()
+    {
+        changePasswordAlert = "";
+
+        if (String.IsNullOrEmpty(passwordCurrent))
+        {
+            changePasswordAlert = _localizer["Current password is empty"];
+            PasswordAlertSeverity = Severity.Error;
+            return;
+        }
+
+        if (AppService.CreateMD5(passwordCurrent) != user.Password)
+        {
+            changePasswordAlert = _localizer["Invalid current password"];
+            PasswordAlertSeverity = Severity.Error;
+            return;
+        }
+
+        if (String.IsNullOrEmpty(passwordNew1))
+        {
+            changePasswordAlert = _localizer["New password is empty"];
+            PasswordAlertSeverity = Severity.Error;
+            return;
+        }
+
+        if (String.IsNullOrEmpty(passwordNew2))
+        {
+            changePasswordAlert = _localizer["Repeat new password is empty"];
+            PasswordAlertSeverity = Severity.Error;
+            return;
+        }
+
+        if (passwordNew1 != passwordNew2)
+        {
+            changePasswordAlert = _localizer["New passwords aren't equals"];
+            PasswordAlertSeverity = Severity.Error;
+            return;
+        }
+
+        user.Password = AppService.CreateMD5(passwordNew1);
+        _BSBoilerPlateContext.Users.Update(user);
+        _BSBoilerPlateContext.SaveChanges();
+        user = _appService.UserLogged();
+
+        changePasswordAlert = _localizer["Password changed"];
+        PasswordAlertSeverity = Severity.Info;
+        StateHasChanged();
+    }
+}

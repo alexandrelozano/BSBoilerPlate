@@ -1,0 +1,144 @@
+﻿@using BSBoilerPlate.Models
+@using BSBoilerPlate.Data
+@using System.ComponentModel.DataAnnotations
+@inject BSBoilerPlateContext BSBoilerPlateContext
+@inject IStringLocalizer<UserDialog> _localizer
+
+<AuthorizeView Roles="Administrator">
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+    <Authorized Context="authContext">
+        <MudForm Model="@user" @ref="form" Validation="@user" ReadOnly="@ReadOnlyDialog()">
+            <MudDialog>
+                <DialogContent>
+                    <MudTextField Label="@_localizer["ID"]" HelperText="Database generated" ReadOnly=true @bind-Value="user.ID" For="@(() => user.ID)" />
+                    <MudTextField Label="@_localizer["UserName"]" @bind-Value="user.UserName" For="@(() => user.UserName)" />
+                    <MudTextField Label="@_localizer["GivenName"]" @bind-Value="user.GivenName" For="@(() => user.GivenName)" />
+                    <MudTextField Label="@_localizer["FirstSurname"]" @bind-Value="user.FirstSurname" For="@(() => user.FirstSurname)" />
+                    <MudTextField Label="@_localizer["SecondSurname"]" @bind-Value="user.SecondSurname" For="@(() => user.SecondSurname)" />
+                    <MudDatePicker Label="@_localizer["Date of birth"]" @bind-Date="user.DOB" For="@(() => user.DOB)" Required=true RequiredError="Required" Editable="true" Mask="@(new DateMask("dd/MM/yyyy"))" DateFormat="dd/MM/yyyy" Placeholder="dd/MM/yyyy" />
+                    <MudSelect Label="@_localizer["Role"]" @bind-Value="user.RoleID" For="@(() => user.RoleID)" Required=true RequiredError="Required" OpenIcon="@Icons.Material.Filled.Group">
+                        @foreach (Role item in roles)
+                        {
+                            <MudSelectItem Value="@item.ID">@item.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                    @if (mode == DialogMode.Insert)
+                    {
+                        <MudTextField Label="@_localizer["Password"]" HelperText="@_localizer["Choose a password"]" Required=true RequiredError="Required" @bind-Value="user.Password" For="@(() => user.Password)" InputType="InputType.Password" />
+                    }
+                    <MudDatePicker Label="@_localizer["Inactive"]" Editable="true" Mask="@(new DateMask("dd/MM/yyyy"))" DateFormat="dd/MM/yyyy" Placeholder="dd/MM/yyyy" @bind-Date="user.Inactive" For="@(() => user.Inactive)" />
+                </DialogContent>
+                <DialogActions>
+                    @if (ShowCancel())
+                    {
+                        <MudButton OnClick="Cancel">@_localizer["Cancel"]</MudButton>
+                    }
+                    <MudButton ButtonType="ButtonType.Button" OnClick="Submit" Variant="Variant.Filled" Color="Color.Primary" Class="ml-auto">@_localizer["Ok"]</MudButton>
+                </DialogActions>
+            </MudDialog>
+        </MudForm>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    MudForm form;
+
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public User user { get; set; } = new User();
+    [Parameter] public DialogMode mode { get; set; }
+
+    private List<Role> roles = new List<Role>();
+
+    bool isShow;
+    InputType PasswordInput = InputType.Password;
+    string PasswordInputIcon = Icons.Material.Filled.VisibilityOff;
+
+    void ButtonTestclick()
+    {
+        @if (isShow)
+        {
+            isShow = false;
+            PasswordInputIcon = Icons.Material.Filled.VisibilityOff;
+            PasswordInput = InputType.Password;
+        }
+        else
+        {
+            isShow = true;
+            PasswordInputIcon = Icons.Material.Filled.Visibility;
+            PasswordInput = InputType.Text;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        roles = BSBoilerPlateContext.Roles.ToList<Role>();
+    }
+
+    private bool ShowCancel()
+    {
+        bool ret = true;
+
+        switch (mode)
+        {
+            case DialogMode.Details:
+                ret = false;
+                break;
+            default:
+                ret = true;
+                break;
+        }
+
+        return ret;
+    }
+
+    private bool ReadOnlyDialog()
+    {
+        bool ret = false;
+
+        switch (mode)
+        {
+            case DialogMode.Update:
+                ret = false;
+                break;
+            case DialogMode.Delete:
+                ret = true;
+                break;
+            case DialogMode.Insert:
+                ret = false;
+                break;
+            case DialogMode.Details:
+                ret = true;
+                break;
+            default:
+                ret = true;
+                break;
+        }
+
+        return ret;
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async void Submit()
+    {
+        if (mode == DialogMode.Details)
+        {
+            MudDialog.Close(DialogResult.Ok<User>(user));
+        }
+        else
+        {
+            await form.Validate();
+
+            if (form.IsValid)
+            {
+                MudDialog.Close(DialogResult.Ok<User>(user));
+            }
+        }
+    }
+}

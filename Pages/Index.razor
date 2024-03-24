@@ -1,0 +1,48 @@
+﻿@page "/"
+@page "/index"
+@using BSBoilerPlate.Authorization
+@inject NavigationManager _navigationManager
+@using System.Globalization
+@using Microsoft.Extensions.Localization
+@using BSBoilerPlate.Services
+@inject IStringLocalizer<Index> _localizer
+
+<PageTitle>Index</PageTitle>
+
+
+<AuthorizeView>
+    <Authorized>
+        <MudText Typo="Typo.h3" GutterBottom="true">@_localizer["Welcome"], @user.Identity.Name</MudText>
+            <MudText Class="mb-8">Welcome to your new app, powered by MudBlazor!</MudText>
+            <MudAlert Severity="Severity.Normal">You can find documentation and examples on our website here: <MudLink Href="https://mudblazor.com" Typo="Typo.body2" Color="Color.Inherit"><b>www.mudblazor.com</b></MudLink></MudAlert>
+        </Authorized>
+        <NotAuthorized>
+
+        </NotAuthorized>
+    </AuthorizeView>
+
+    @code {
+    public string Email { get; set; }
+
+    public string Password { get; set; }
+
+    public string Id { get; set; } = "12345";
+
+    [CascadingParameter] public Task<AuthenticationState> AuthTask { get; set; }
+
+    [Inject] private AuthenticationStateProvider AuthState { get; set; }
+
+    private System.Security.Claims.ClaimsPrincipal user;
+
+    protected async override Task OnInitializedAsync()
+    {
+        var authState = await AuthTask;
+        this.user = authState.User;
+
+        if (!user.Identity.IsAuthenticated)
+        {
+            _navigationManager.NavigateTo("login");
+        }
+    }
+
+}

@@ -1,0 +1,144 @@
+﻿@page "/administration/users"
+@using BSBoilerPlate.Models
+@using BSBoilerPlate.Services
+@using System.Data;
+@inject IDialogService _dialogService;
+@inject AppService _appService
+@inject QuestPDFService _questPDFService
+@inject IJSRuntime JS
+@inject IStringLocalizer<Users> _localizer
+
+<AuthorizeView Roles="Administrator">
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+    <Authorized Context="authContext">
+        <PageTitle>Users</PageTitle>
+
+        <MudText Typo="Typo.h3" GutterBottom="true">@_localizer["Users"]</MudText>
+        <MudText Class="mb-8">@_localizer["Users administration page"]</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="ml-auto" OnClick="@(async () => await InsertAsync())">@_localizer["New user"]</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Default" Class="ml-auto" OnClick="@(async () => await PDFAsync())">@_localizer["PDF"]</MudButton>
+        @if (users == null)
+        {
+            <MudText Class="mb-8">@_localizer["No users found"]</MudText>
+        }
+        else
+        {
+            <MudTable Items="users" Hover="true" SortLabel="Sort By" Elevation="0">
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel InitialDirection="SortDirection.Ascending" SortBy="new Func<User, object>(x=>x.ID)">@_localizer["ID"]</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<User, object>(x=>x.UserName)">@_localizer["UserName"]</MudTableSortLabel></MudTh>
+                             <MudTh><MudTableSortLabel SortBy="new Func<User, object>(x=>x.GivenName)">@_localizer["GivenName"]</MudTableSortLabel></MudTh>
+                                     <MudTh><MudTableSortLabel SortBy="new Func<User, object>(x=>x.FirstSurname)">@_localizer["FirstSurname"]</MudTableSortLabel></MudTh>
+                                             <MudTh><MudTableSortLabel SortBy="new Func<User, object>(x=>x.SecondSurname)">@_localizer["SecondSurname"]</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<User, object>(x=>x.DOB)">@_localizer["Date Of Birth"]</MudTableSortLabel></MudTh>
+                    <MudTh>@_localizer["Actions"]</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="ID">@context.ID</MudTd>
+                        <MudTd DataLabel="UserName">@context.UserName</MudTd>
+                        <MudTd DataLabel="GivenName">@context.GivenName</MudTd>
+                        <MudTd DataLabel="FirstSurname">@context.FirstSurname</MudTd>
+                        <MudTd DataLabel="SecondSurname">@context.SecondSurname</MudTd>
+                        <MudTd DataLabel="Date Of Birth">
+                            @if (context.DOB.HasValue)
+                        {
+                            @context.DOB.Value.ToString("dd/MM/yyyy")
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="">
+                        <MudFab @onclick="@(()=>DetailsAsync(@context.ID))" Color="Color.Primary" Icon="@Icons.Material.Filled.ViewList" Size="MudBlazor.Size.Small" IconSize="MudBlazor.Size.Small" />
+                        <MudFab @onclick="@(()=>UpdateAsync(@context.ID))" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit" Size="MudBlazor.Size.Small" IconSize="MudBlazor.Size.Small" />
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[]{10, 50, 100}" />
+                </PagerContent>
+            </MudTable>
+        }
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private List<User> users = new List<User>();
+
+    protected async Task PDFAsync()
+    {
+        DataTable datatable = _appService.ToDataTable(users.Select(
+            x => new
+            {
+                x.ID,
+                x.UserName,
+                Given_Name = x.GivenName,
+                First_Surname = x.FirstSurname,
+                Second_Surname = x.SecondSurname,
+                Date_of_birth = x.DOB,
+                Role = x.Role.Name
+            }
+        ).ToList());
+
+        MemoryStream pdfstream = _questPDFService.CreatePDFTable(datatable, "Users", true);
+
+        using var streamRef = new DotNetStreamReference(stream: pdfstream);
+        await JS.InvokeVoidAsync("downloadFileFromStream", $"users_{DateTime.Now.ToString("yyyyMMddHHmmSS")}.pdf", streamRef);
+    }
+
+    protected async Task InsertAsync()
+    {
+        var parameters = new DialogParameters();
+        var userInsert = new User();
+
+        parameters.Add("User", userInsert);
+        parameters.Add("Mode", DialogMode.Insert);
+
+        var dialog = await _dialogService.Show<UserDialog>(_localizer["New user"], parameters).Result;
+
+        if (dialog.Data != null)
+        {
+            var userInserted = dialog.Data as User;
+            userInserted.Password = AppService.CreateMD5(userInserted.Password);
+
+            _appService.UserInsert(ref userInserted);
+
+            users.Add(userInserted);
+        }
+    }
+
+    protected async Task UpdateAsync(int ID)
+    {
+        var parameters = new DialogParameters();
+        var userUpdate = _appService.UserGet(ID);
+
+        parameters.Add("User", userUpdate);
+        parameters.Add("Mode", DialogMode.Update);
+
+        var dialog = await _dialogService.Show<UserDialog>(_localizer["Update"], parameters).Result;
+
+        if (dialog.Data != null)
+        {
+            var userUpdated = dialog.Data as User;
+
+            _appService.UserUpdate(userUpdated);
+
+            users.Remove(userUpdated);
+            users.Insert(0, userUpdated);
+        }
+    }
+
+    protected async Task DetailsAsync(int ID)
+    {
+        var parameters = new DialogParameters();
+        var userDetails = _appService.UserGet(ID);
+
+        parameters.Add("User", userDetails);
+        parameters.Add("Mode", DialogMode.Details);
+
+        var dialog = await _dialogService.Show<UserDialog>(_localizer["Details"], parameters).Result;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        users = _appService.UsersGet();
+    }
+}

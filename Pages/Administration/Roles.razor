@@ -1,0 +1,128 @@
+﻿@page "/administration/roles"
+@using BSBoilerPlate.Models
+@using BSBoilerPlate.Data
+@inject IDialogService _dialogService;
+@inject BSBoilerPlateContext BSBoilerPlateContext
+@inject IStringLocalizer<Roles> _localizer
+
+<AuthorizeView Roles="Administrator">
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+    <Authorized Context="authContext">
+        <PageTitle>Roles</PageTitle>
+
+        <MudText Typo="Typo.h3" GutterBottom="true">Roles</MudText>
+        <MudText Class="mb-8">@_localizer["Roles administration page"]</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="ml-auto" OnClick="@(async () => await InsertAsync())">@_localizer["New role"]</MudButton>
+        @if (roles == null)
+        {
+            <MudText Class="mb-8">@_localizer["No roles found"]</MudText>
+        }
+        else
+        {
+            <MudTable Items="roles" Hover="true" SortLabel="@_localizer["Sort By"]" Elevation="0">
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel InitialDirection="SortDirection.Ascending" SortBy="new Func<Role, object>(x=>x.ID)">@_localizer["ID"]</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<Role, object>(x=>x.Name)">@_localizer["Name"]</MudTableSortLabel></MudTh>
+                    <MudTh>@_localizer["Actions"]</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="ID">@context.ID</MudTd>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="">
+                            <MudFab @onclick="@(()=>DetailsAsync(@context.ID))" Color="Color.Primary" Icon="@Icons.Material.Filled.ViewList" Size="Size.Small" IconSize="Size.Small" />
+                            <MudFab @onclick="@(()=>UpdateAsync(@context.ID))" Color="Color.Primary" Icon="@Icons.Material.Filled.Edit" Size="Size.Small" IconSize="Size.Small" />
+                            <MudFab @onclick="@(()=>DeleteAsync(@context.ID))" Color="Color.Secondary" Icon="@Icons.Material.Filled.Delete" Size="Size.Small" IconSize="Size.Small" />
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager PageSizeOptions="new int[]{10, 50, 100}" />
+                    </PagerContent>
+                </MudTable>
+        }
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private List<Role> roles = new List<Role>();
+
+    protected async Task InsertAsync()
+    {
+        var parameters = new DialogParameters();
+        var roleInsert = new Role();
+
+        parameters.Add("Role", roleInsert);
+        parameters.Add("Mode", DialogMode.Insert);
+
+        var dialog = await _dialogService.Show<RoleDialog>(_localizer["New role"],
+                                         parameters).Result;
+
+        if (dialog.Data != null)
+        {
+            var roleInserted = dialog.Data as Role;
+            BSBoilerPlateContext.Roles.Add(roleInserted);
+            await BSBoilerPlateContext.SaveChangesAsync();
+            roles.Add(roleInserted);
+        }
+    }
+
+    protected async Task DeleteAsync(int ID)
+    {
+        var parameters = new DialogParameters();
+        var roleDelete = await BSBoilerPlateContext.Roles.FindAsync(ID);
+
+        parameters.Add("Role", roleDelete);
+        parameters.Add("Mode", DialogMode.Delete);
+
+        var dialog = await _dialogService.Show<RoleDialog>(_localizer["Delete"],
+                                         parameters).Result;
+
+        if (dialog.Data != null)
+        {
+            var roleDeleted = dialog.Data as Role;
+            BSBoilerPlateContext.Roles.Remove(roleDeleted);
+            await BSBoilerPlateContext.SaveChangesAsync();
+            roles.Remove(roleDeleted);
+        }
+    }
+
+    protected async Task UpdateAsync(int ID)
+    {
+        var parameters = new DialogParameters();
+        var roleUpdate = await BSBoilerPlateContext.Roles.FindAsync(ID);
+
+        parameters.Add("Role", roleUpdate);
+        parameters.Add("Mode", DialogMode.Update);
+
+        var dialog = await _dialogService.Show<RoleDialog>(_localizer["Update"],
+                                         parameters).Result;
+
+        if (dialog.Data != null)
+        {
+            var roleUpdated = dialog.Data as Role;
+            BSBoilerPlateContext.Roles.Update(roleUpdated);
+            await BSBoilerPlateContext.SaveChangesAsync();
+
+            roles.Remove(roleUpdated);
+            roles.Insert(0, roleUpdated);
+        }
+    }
+
+    protected async Task DetailsAsync(int ID)
+    {
+        var parameters = new DialogParameters();
+        var roleDetails = await BSBoilerPlateContext.Roles.FindAsync(ID);
+
+        parameters.Add("Role", roleDetails);
+        parameters.Add("Mode", DialogMode.Details);
+
+        var dialog = await _dialogService.Show<RoleDialog>(_localizer["Details"],
+                                         parameters).Result;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        roles = BSBoilerPlateContext.Roles.ToList<Role>();
+    }
+}
