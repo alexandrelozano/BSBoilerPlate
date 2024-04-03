@@ -10,6 +10,7 @@
 @inject AppService _appService
 @inject IStringLocalizer<Login> _localizer
 @inject Blazored.SessionStorage.ISessionStorageService sessionStorage
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Login</PageTitle>
 
@@ -21,7 +22,7 @@
             </MudCardHeader>
             <MudCardContent>
                 <MudTextField autocomplete=@("mud-disabled-"+Guid.NewGuid()) T="string" Label="@_localizer["Username"]"
-                              Required="true" @ref="txtUsername"
+                              Required="true" @ref="txtUsername" id="txtUsername"
                               RequiredError="@_localizer["User name is required!"]"
                               Variant="Variant.Outlined"
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.AccountCircle" />
@@ -136,6 +137,8 @@
 
             LoginHidden = false;
             StateHasChanged();
+
+            await JSRuntime.InvokeVoidAsync("focusElement", "txtUsername");
         }
     }
 
