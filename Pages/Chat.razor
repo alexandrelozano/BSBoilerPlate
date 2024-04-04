@@ -11,6 +11,7 @@
 @inject IStringLocalizer<Chat> _localizer
 @inject AppService _appService
 @inject NavigationManager _navigationManager
+@inject IJSRuntime JSRuntime
 
 <AuthorizeView>
     <NotAuthorized>
@@ -41,17 +42,28 @@
                                         }
                                     }
 
+                                    DateTime? lastDate = null;
                                     foreach (ChatMessage chatMessage in _appService.ChatMessageGet(users.ElementAt(activeIndex).ID, user.ID))
                                     {
+                                        if (lastDate.HasValue && lastDate.Value.ToString("yyyyMMdd") != chatMessage.DateTime.ToString("yyyyMMdd"))
+                                        {
+                                            <MudText Align="Align.Center" Typo="Typo.body2">
+                                                <MudChip Size="Size.Small">@chatMessage.DateTime.ToShortDateString()</MudChip>
+                                            </MudText>
+                                        }
+
                                         <MudText Align="@(chatMessage.UserFromID==user.ID ? Align.Right : Align.Left)" Typo="Typo.body2">
-                                            @(new MarkupString($"{chatMessage.Message} <sub>{chatMessage.DateTime.ToShortDateString()} {chatMessage.DateTime.ToShortTimeString()}</sub>"))
+                                            @chatMessage.Message
+                                            <sub><MudChip Size="Size.Small">@chatMessage.DateTime.ToShortTimeString()</MudChip></sub>
                                         </MudText>
+
+                                        lastDate = chatMessage.DateTime;
                                     }
                                 }
                             </MudPaper>
                             <MudPaper Style="flex: 0 1 auto;" Outlined="false" Elevation="0" Square="false">
                                 <MudPaper Style="display: flex; flex-flow: row; height:100%; width:100%;">
-                                    <MudTextField T="string" @bind-Value="message" Variant="Variant.Outlined" Style="flex: 1 1 auto;"></MudTextField>
+                                    <MudTextField T="string" @bind-Value="message" Variant="Variant.Outlined" id="txtMessage" Style="flex: 1 1 auto;"></MudTextField>
                                 <MudButton Variant="Variant.Filled" Style="flex: 0 1 auto;" OnClick="@(async ()=> await SendMessage())">Send</MudButton>
                                 </MudPaper>
                             </MudPaper>
@@ -87,6 +99,11 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         ScrollToEnd();
+
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("focusElement", "txtMessage");
+        }
     }
 
     void ScrollToEnd()
