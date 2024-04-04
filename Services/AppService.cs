@@ -75,16 +75,19 @@ namespace BSBoilerPlate.Services
 
         public void ChatMessageSend(string message, int UserFromID, int UserToID)
         {
-            ChatMessage chatMessage = new ChatMessage();
-            chatMessage.Message = message;
-            chatMessage.UserFromID = UserFromID;
-            chatMessage.UserToID = UserToID;
-            chatMessage.DateTime = DateTime.Now;
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                ChatMessage chatMessage = new ChatMessage();
+                chatMessage.Message = message;
+                chatMessage.UserFromID = UserFromID;
+                chatMessage.UserToID = UserToID;
+                chatMessage.DateTime = DateTime.Now;
 
-            _BSBoilerPlateContext.ChatMessages.Add(chatMessage);
-            _BSBoilerPlateContext.SaveChanges();
+                _BSBoilerPlateContext.ChatMessages.Add(chatMessage);
+                _BSBoilerPlateContext.SaveChanges();
 
-            Log(LogAction.Names.ChatMessageSend.ToString(), chatMessage);
+                Log(LogAction.Names.ChatMessageSend.ToString(), chatMessage);
+            }
         }
 
         public Models.Application ApplicationGet()
